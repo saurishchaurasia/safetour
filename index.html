@@ -1,0 +1,248 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Smart Tourist Safety Monitoring System</title>
+    <link rel="stylesheet" href="styles.css">
+  </head>
+  <body>
+    <header class="app-header">
+      <div>
+        <p class="eyebrow">Smart tourism safety</p>
+        <h1>SafeTrail Control</h1>
+      </div>
+      <nav class="mode-switch" aria-label="Dashboard mode">
+        <button class="mode-button is-active" type="button" data-mode="tourist">Tourist</button>
+        <button class="mode-button" type="button" data-mode="admin">Authority</button>
+      </nav>
+    </header>
+
+    <main>
+      <section class="hero">
+        <div class="hero-copy">
+          <p class="eyebrow">GPS tracking + incident response</p>
+          <h2>Real-time safety guidance for tourists in unfamiliar places.</h2>
+          <p>
+            The system monitors location, checks risk zones, surfaces essential facilities,
+            and escalates SOS alerts to an authority dashboard.
+          </p>
+        </div>
+        <div class="identity-card" aria-label="Tourist identity">
+          <span class="status-dot"></span>
+          <strong id="touristName">Aarav Mehta</strong>
+          <p>Tourist ID: TRV-2049</p>
+          <p>Emergency contact linked</p>
+        </div>
+      </section>
+
+      <section id="touristDashboard" class="dashboard-view is-visible" aria-label="Tourist dashboard">
+        <div class="grid two-col">
+          <article class="panel live-panel">
+            <div class="panel-heading">
+              <div>
+                <p class="eyebrow">Live location</p>
+                <h2>Tourist safety monitor</h2>
+              </div>
+              <button id="locateButton" class="secondary-button" type="button">Use my GPS</button>
+            </div>
+            <div class="location-readout">
+              <div>
+                <span id="gpsStatus">Simulated GPS active</span>
+                <strong id="currentLocation">Central Plaza approach</strong>
+              </div>
+              <div>
+                <span>Risk level</span>
+                <strong id="riskLabel" class="risk medium">Medium</strong>
+              </div>
+            </div>
+            <div class="route-controls">
+              <button class="step-button" type="button" data-step="-1">Previous point</button>
+              <button class="step-button" type="button" data-step="1">Next point</button>
+            </div>
+            <p class="helper-text">
+              Move through the sample route to trigger geo-fence warnings near danger zones.
+            </p>
+          </article>
+
+          <article class="panel sos-panel">
+            <p class="eyebrow">One-touch emergency</p>
+            <h2>SOS response module</h2>
+            <p>
+              Sends current location, tourist identity, risk context, and incident type to the
+              response queue.
+            </p>
+            <button id="panicButton" class="panic-button" type="button">
+              <span>SOS</span>
+              <small>Notify authority</small>
+            </button>
+          </article>
+        </div>
+
+        <section class="map-section" id="map">
+          <div class="panel-heading map-heading">
+            <div>
+              <p class="eyebrow">Geo-fencing and place intelligence</p>
+              <h2>Risk map, facilities, monuments, and restaurants</h2>
+            </div>
+            <div class="controls">
+              <label>
+                Places
+                <select id="categoryFilter">
+                  <option value="all">All places</option>
+                  <option value="monument">Monuments</option>
+                  <option value="restaurant">Restaurants</option>
+                  <option value="facility">Facilities</option>
+                  <option value="help">Help points</option>
+                </select>
+              </label>
+              <label>
+                Crime timeframe
+                <select id="timeframeFilter">
+                  <option value="30">Last 30 days</option>
+                  <option value="90" selected>Last 90 days</option>
+                  <option value="180">Last 180 days</option>
+                  <option value="365">Last year</option>
+                </select>
+              </label>
+            </div>
+          </div>
+
+          <div class="map-layout">
+            <div class="city-map" aria-label="Tourist safety map">
+              <div class="map-grid"></div>
+              <div id="heatLayer" class="heat-layer" aria-hidden="true"></div>
+              <div id="zoneLayer" class="zone-layer"></div>
+              <div id="markerLayer" class="marker-layer"></div>
+              <div id="touristMarker" class="tourist-marker" aria-label="Tourist current location">T</div>
+              <div class="map-label gate">Heritage Gate</div>
+              <div class="map-label plaza">Central Plaza</div>
+              <div class="map-label river">Riverside Walk</div>
+            </div>
+
+            <aside class="panel detail-panel">
+              <div id="placeDetails">
+                <p class="eyebrow">Selected place</p>
+                <h3>Central Plaza</h3>
+                <p>Select a marker to compare public ratings with tourist-only SafeTrail ratings.</p>
+              </div>
+              <div class="legend">
+                <span>Low</span>
+                <div class="legend-bar"></div>
+                <span>High</span>
+              </div>
+            </aside>
+          </div>
+        </section>
+
+        <div class="grid two-col">
+          <section class="panel">
+            <p class="eyebrow">Facility information database</p>
+            <h2>Nearby essential guidance</h2>
+            <div id="facilityList" class="facility-list"></div>
+          </section>
+
+          <section class="panel">
+            <p class="eyebrow">Tourist reporting</p>
+            <h2>Add an incident report</h2>
+            <form id="reportForm" class="report-form">
+              <label>
+                Incident type
+                <select id="incidentType">
+                  <option>Theft</option>
+                  <option>Harassment</option>
+                  <option>Accident risk</option>
+                  <option>Medical assistance</option>
+                  <option>Unsafe crowding</option>
+                </select>
+              </label>
+              <label>
+                Location note
+                <input id="incidentLocation" type="text" placeholder="Near Central Plaza" required>
+              </label>
+              <label>
+                Severity
+                <input id="severity" type="range" min="1" max="5" value="3">
+              </label>
+              <button class="primary-button" type="submit">Submit report</button>
+            </form>
+          </section>
+        </div>
+      </section>
+
+      <section id="adminDashboard" class="dashboard-view" aria-label="Authority dashboard">
+        <div class="grid four-col">
+          <article class="metric panel">
+            <span id="activeTourists">24</span>
+            <p>Active tourists</p>
+          </article>
+          <article class="metric panel">
+            <span id="openIncidents">0</span>
+            <p>Open incidents</p>
+          </article>
+          <article class="metric panel">
+            <span id="safeScore">82</span>
+            <p>Area safety score</p>
+          </article>
+          <article class="metric panel">
+            <span id="responseTime">04m</span>
+            <p>Avg response</p>
+          </article>
+        </div>
+
+        <div class="grid two-col admin-grid">
+          <section class="panel">
+            <div class="panel-heading">
+              <div>
+                <p class="eyebrow">Emergency control dashboard</p>
+                <h2>Live alert queue</h2>
+              </div>
+              <button id="clearAlerts" class="secondary-button" type="button">Clear resolved</button>
+            </div>
+            <div id="alertList" class="alert-list" aria-live="polite"></div>
+          </section>
+
+          <section class="panel">
+            <p class="eyebrow">Risk intelligence</p>
+            <h2>Zone monitoring</h2>
+            <div id="zoneList" class="zone-list"></div>
+          </section>
+        </div>
+
+        <section class="panel">
+          <p class="eyebrow">Active tourist tracking</p>
+          <h2>Movement and response status</h2>
+          <div class="tourist-table" role="table" aria-label="Tracked tourists">
+            <div role="row" class="table-head">
+              <span role="columnheader">Tourist</span>
+              <span role="columnheader">Location</span>
+              <span role="columnheader">Risk</span>
+              <span role="columnheader">Status</span>
+            </div>
+            <div role="row">
+              <span>Aarav Mehta</span>
+              <span id="adminLocation">Central Plaza approach</span>
+              <span id="adminRisk">Medium</span>
+              <span>Tracking live</span>
+            </div>
+            <div role="row">
+              <span>Priya Nair</span>
+              <span>City Museum</span>
+              <span>Low</span>
+              <span>Normal</span>
+            </div>
+            <div role="row">
+              <span>Rohan Das</span>
+              <span>Night Market Cafe</span>
+              <span>Medium</span>
+              <span>Route advised</span>
+            </div>
+          </div>
+        </section>
+      </section>
+    </main>
+
+    <div id="toast" class="toast" role="status" aria-live="polite"></div>
+    <script src="app.js"></script>
+  </body>
+</html>

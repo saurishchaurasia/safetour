@@ -1,0 +1,167 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Antigravity SafeTour Portal</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=Outfit:wght@500;700;800;900&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+    <link rel="stylesheet" href="style.css">
+  </head>
+  <body>
+    <div class="ambient ambient-a"></div>
+    <div class="ambient ambient-b"></div>
+
+    <header class="shell-header glass">
+      <div class="brand">
+        <div class="brand-mark">AG</div>
+        <div>
+          <p>Antigravity</p>
+          <h1>SafeTour Portal</h1>
+        </div>
+      </div>
+      <div class="header-actions">
+        <div id="sessionPill" class="session-pill">Guest simulator</div>
+        <div class="view-toggle" aria-label="View mode">
+          <button class="view-btn is-active" data-view="split">Split</button>
+          <button class="view-btn" data-view="mobile">Mobile</button>
+          <button class="view-btn" data-view="admin">Admin</button>
+        </div>
+      </div>
+    </header>
+
+    <main id="appShell" class="app-shell">
+      <section class="mobile-column">
+        <div class="phone-frame">
+          <div class="phone-speaker"></div>
+
+          <section id="authScreen" class="phone-screen is-active">
+            <div class="phone-hero">
+              <p class="eyebrow">Tourist mobile safety</p>
+              <h2>Digital ID, SOS, safe travel ratings.</h2>
+            </div>
+
+            <div class="auth-tabs">
+              <button class="auth-tab is-active" data-auth="login">Login</button>
+              <button class="auth-tab" data-auth="register">Register</button>
+            </div>
+
+            <form id="loginForm" class="auth-form is-active">
+              <label>Email<input id="loginEmail" type="email" value="demo@safetour.ai" required></label>
+              <label>Password<input id="loginPassword" type="password" value="password123" required></label>
+              <button class="primary-action" type="submit">Enter SafeTour</button>
+            </form>
+
+            <form id="registerForm" class="auth-form">
+              <label>Name<input id="registerName" type="text" value="Aarav Mehta" required></label>
+              <label>Email<input id="registerEmail" type="email" value="demo@safetour.ai" required></label>
+              <label>Password<input id="registerPassword" type="password" value="password123" minlength="8" required></label>
+              <label>Nationality<input id="registerNationality" type="text" value="Indian" required></label>
+              <button class="primary-action" type="submit">Create Tourist ID</button>
+            </form>
+          </section>
+
+          <section id="homeScreen" class="phone-screen">
+            <div class="mobile-topbar">
+              <div>
+                <p class="eyebrow">Verified tourist</p>
+                <h2 id="mobileUserName">Traveler</h2>
+              </div>
+              <button id="logoutBtn" class="icon-button" title="Logout"><i data-lucide="log-out"></i></button>
+            </div>
+
+            <article class="id-card">
+              <div>
+                <p>Digital Tourist ID</p>
+                <h3 id="touristId">TID0000000000000000</h3>
+              </div>
+              <div class="qr-mock" aria-label="QR code mock">
+                <span></span><span></span><span></span><span></span>
+              </div>
+            </article>
+
+            <div class="status-grid">
+              <article><strong id="safetyScore">86%</strong><span>AI safety</span></article>
+              <article><strong id="gpsStatus">Live</strong><span>GPS stream</span></article>
+            </div>
+
+            <div class="sos-zone">
+              <button id="sosButton" class="sos-button" type="button">
+                <span>SOS</span>
+                <small>Hold safe network</small>
+              </button>
+              <button id="cancelSosBtn" class="cancel-sos" type="button">Cancel false alarm</button>
+              <div id="countdown" class="countdown"></div>
+            </div>
+
+            <section class="directory">
+              <div class="section-row">
+                <h3>Travel Directory</h3>
+                <button id="seedReviewBtn" class="text-button" type="button">Demo rating</button>
+              </div>
+              <div id="poiList" class="poi-list"></div>
+            </section>
+          </section>
+        </div>
+      </section>
+
+      <section class="admin-column glass">
+        <div class="admin-header">
+          <div>
+            <p class="eyebrow">Admin command center</p>
+            <h2>Real-time Safety Operations</h2>
+          </div>
+          <div class="live-indicator"><span></span> Socket online</div>
+        </div>
+
+        <div class="metric-grid">
+          <article><strong id="activeTourists">7</strong><span>Active tourists</span></article>
+          <article><strong id="sosCount">0</strong><span>SOS alerts</span></article>
+          <article><strong id="dangerCount">4</strong><span>Danger zones</span></article>
+          <article><strong id="ratingCount">18</strong><span>Tourist reviews</span></article>
+        </div>
+
+        <div class="map-toolbar">
+          <div class="chip-group">
+            <button class="chip is-active" data-filter="all">All</button>
+            <button class="chip" data-filter="monument">Monuments</button>
+            <button class="chip" data-filter="restaurant">Restaurants</button>
+            <button class="chip" data-filter="hospital">Hospitals</button>
+            <button class="chip" data-filter="police">Police</button>
+          </div>
+          <label class="heat-toggle">
+            <input id="heatToggle" type="checkbox" checked>
+            Danger heatmap
+          </label>
+        </div>
+
+        <div id="safetyMap" class="safety-map"></div>
+
+        <div class="admin-panels">
+          <section class="terminal-panel">
+            <div class="section-row">
+              <h3>WebSocket Log Console</h3>
+              <button id="clearLogsBtn" class="text-button" type="button">Clear</button>
+            </div>
+            <div id="socketLog" class="socket-log"></div>
+          </section>
+
+          <section class="dispatch-panel">
+            <h3>Emergency Control Terminal</h3>
+            <textarea id="broadcastMessage" placeholder="Broadcast safety alert to all connected tourists...">Curfew advisory: avoid the Old Market south lane after 9 PM.</textarea>
+            <button id="broadcastBtn" class="primary-action" type="button">Broadcast Alert</button>
+            <div id="dispatchFeed" class="dispatch-feed"></div>
+          </section>
+        </div>
+      </section>
+    </main>
+
+    <div id="toast" class="toast"></div>
+
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script src="https://unpkg.com/lucide@latest/dist/umd/lucide.js"></script>
+    <script src="app.js"></script>
+  </body>
+</html>

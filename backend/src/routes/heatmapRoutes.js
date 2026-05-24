@@ -1,9 +1,21 @@
 const router = require("express").Router();
-const { protect, requireAdmin } = require("../middleware/authMiddleware");
+
+const {
+  protect,
+  requireAdmin
+} = require("../middleware/authMiddleware");
+
 const controller = require("../controllers/heatmapController");
 
-router.use(protect);
 router.get("/", controller.getHeatmap);
-router.post("/seed-demo", requireAdmin, controller.seedDemoZones);
+
+router.post("/analyze", controller.analyzeArea);
+
+router.post(
+  "/seed-demo",
+  protect,
+  requireAdmin,
+  controller.seedDemoZones
+);
 
 module.exports = router;

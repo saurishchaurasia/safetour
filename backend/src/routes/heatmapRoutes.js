@@ -1,21 +1,16 @@
-const router = require("express").Router();
+const express = require("express");
+
+const router = express.Router();
 
 const {
-  protect,
-  requireAdmin
-} = require("../middleware/authMiddleware");
+  getHeatmap,
+  analyzeArea
+} = require("../controllers/heatmapController");
 
-const controller = require("../controllers/heatmapController");
+// GET ALL HEATMAP DATA
+router.get("/", getHeatmap);
 
-router.get("/", controller.getHeatmap);
-
-router.post("/analyze", controller.analyzeArea);
-
-router.post(
-  "/seed-demo",
-  protect,
-  requireAdmin,
-  controller.seedDemoZones
-);
+// ANALYZE CLICKED AREA
+router.post("/analyze", analyzeArea);
 
 module.exports = router;

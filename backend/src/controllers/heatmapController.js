@@ -1,221 +1,339 @@
-const DangerZone = require("../models/DangerZone");
-const Alert = require("../models/Alert");
 const asyncHandler = require("../utils/asyncHandler");
-const { calculateDangerScore, riskColor } = require("../utils/riskEngine");
 
 const {
   loadSouthCrimeDataset,
-  filterStaticRecords,
-  buildAnalytics,
-  isWithinSouthBengaluru
+  SOUTH_BENGALURU_BOUNDS
 } = require("../utils/southCrimeData");
 
-const demoZones = [
-  {
-    _id: "demo-old-market",
-    name: "Old Market Night Risk",
-    category: "crime",
-    color: "orange",
-    historicalIncidentCount: 16,
-    userReportCount: 6,
-    activeSosCount: 1,
-    averageTouristRating: 3.2,
-    location: {
-      latitude: 28.615,
-      longitude: 77.21,
-      radiusMeters: 900
-    }
-  },
-  {
-    _id: "demo-central-heritage",
-    name: "Central Heritage Safe Zone",
-    category: "crowd",
-    color: "green",
-    historicalIncidentCount: 2,
-    userReportCount: 1,
-    activeSosCount: 0,
-    averageTouristRating: 4.7,
-    location: {
-      latitude: 28.613,
-      longitude: 77.204,
-      radiusMeters: 700
-    }
-  },
-  {
-    _id: "demo-service-road",
-    name: "Restricted Service Road",
-    category: "restricted",
-    color: "red",
-    historicalIncidentCount: 22,
-    userReportCount: 10,
-    activeSosCount: 2,
-    averageTouristRating: 2.8,
-    location: {
-      latitude: 28.619,
-      longitude: 77.217,
-      radiusMeters: 650
-    }
-  }
-];
+// -----------------------------------------------------
+// HAVERSINE DISTANCE
+// -----------------------------------------------------
 
-function toHeatmapPoint(point) {
-  return {
-    id: point.id || point._id,
+function haversineMeters(lat1, lon1, lat2, lon2) {
+  const toRad = (v) => (v * Math.PI) / 180;
 
-    latitude: point.latitude,
-    longitude: point.longitude,
+  const R = 6371000;
 
-    radiusMeters: point.radiusMeters || 800,
+  const dLat = toRad(lat2 - lat1);
+  const dLon = toRad(lon2 - lon1);
 
-    dangerScore: point.dangerScore || 0,
+  const a =
+    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+    Math.cos(toRad(lat1)) *
+      Math.cos(toRad(lat2)) *
+      Math.sin(dLon / 2) *
+      Math.sin(dLon / 2);
 
-    riskLevel: point.riskLevel || "Medium",
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
 
-    totalCrimes: point.totalCrimes || 0,
-
-    topCrimes: point.topCrimes || [],
-
-    recommendation:
-      point.recommendation
-      || "Stay alert and avoid isolated roads.",
-
-    crimeType:
-      point.crimeType
-      || "General Crime",
-
-    color:
-      point.dangerScore >= 80
-        ? "red"
-        : point.dangerScore >= 60
-        ? "orange"
-        : point.dangerScore >= 35
-        ? "yellow"
-        : "green"
-  };
+  return R * c;
 }
 
-const getHeatmap = asyncHandler(async (_req, res) => {
-  const dataset = loadSouthCrimeDataset();
+// -----------------------------------------------------
+// HELPERS
+// -----------------------------------------------------
 
-  if (dataset.records?.length) {
-    const points = dataset.records.slice(0, 3000).map((record, index) => ({
-      id: record.externalId || `crime-${index}`,
-      latitude: record.latitude,
-      longitude: record.longitude,
-      dangerScore: Math.min(100, (record.severity || 3) * 20),
-      riskPercentage: Math.min(100, (record.severity || 3) * 20),
-      crimeType: record.crimeType,
-      area: record.area,
-      policeStation: record.policeStation,
-      color:
-        (record.severity || 3) >= 4
-          ? "red"
-          : (record.severity || 3) >= 3
-          ? "orange"
-          : "yellow",
-      radiusMeters: 120
-    }));
+function getRiskLevel(score) {
+  if (score >= 75) return "Critical";
+  if (score >= 50) return "High";
+  if (score >= 25) return "Moderate";
+  return "Low";
+}
 
-    return res.json({
-      points,
-      dataSource: "south-bengaluru-crime-dataset",
-      totalRecords: dataset.records.length,
-      bounds: dataset.bounds
+function calculateDangerScore(crimeType, clusterSize = 1) {
+  const severityMap = {
+    Murder: 95,
+    Rape: 92,
+    "Attempted Murder": 88,
+    Kidnap: 82,
+    Robbery: 72,
+    Assault: 65,
+    "Chain Snatching": 58,
+    "4 Wheeler Theft": 48,
+    "2 wheeler theft": 42,
+    "Ordinary Theft": 35
+  };
+
+  const base = severityMap[crimeType] || 30;
+
+  const densityBoost = Math.min(clusterSize * 2, 25);
+
+  return Math.min(base + densityBoost, 100);
+}
+
+function getRecommendation(score) {
+  if (score >= 75) {
+    return "Avoid isolated areas. Travel in groups and remain highly alert.";
+  }
+
+  if (score >= 50) {
+    return "Exercise caution especially during evening and night hours.";
+  }
+
+  if (score >= 25) {
+    return "Stay aware of surroundings and secure valuables.";
+  }
+
+  return "Area is relatively safe with normal precautions.";
+}
+
+// -----------------------------------------------------
+// CLUSTER POINTS
+// -----------------------------------------------------
+
+function clusterPoints(records, clusterRadius = 180) {
+  const visited = new Array(records.length).fill(false);
+
+  const clusters = [];
+
+  for (let i = 0; i < records.length; i++) {
+    if (visited[i]) continue;
+
+    const cluster = [records[i]];
+
+    visited[i] = true;
+
+    for (let j = i + 1; j < records.length; j++) {
+      if (visited[j]) continue;
+
+      const dist = haversineMeters(
+        records[i].latitude,
+        records[i].longitude,
+        records[j].latitude,
+        records[j].longitude
+      );
+
+      if (dist <= clusterRadius) {
+        cluster.push(records[j]);
+        visited[j] = true;
+      }
+    }
+
+    const lat =
+      cluster.reduce((sum, p) => sum + p.latitude, 0) / cluster.length;
+
+    const lng =
+      cluster.reduce((sum, p) => sum + p.longitude, 0) / cluster.length;
+
+    const crimeCounts = {};
+
+    cluster.forEach((c) => {
+      crimeCounts[c.crimeType] =
+        (crimeCounts[c.crimeType] || 0) + 1;
+    });
+
+    const dominantCrime = Object.entries(crimeCounts).sort(
+      (a, b) => b[1] - a[1]
+    )[0][0];
+
+    const dangerScore = calculateDangerScore(
+      dominantCrime,
+      cluster.length
+    );
+
+    const riskLevel = getRiskLevel(dangerScore);
+
+    const topCrimes = Object.entries(crimeCounts)
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 4)
+      .map(([crimeType, count]) => ({
+        crimeType,
+        probability: Math.round((count / cluster.length) * 100),
+        count
+      }));
+
+    clusters.push({
+      id: `cluster-${i}`,
+
+      latitude: lat,
+      longitude: lng,
+
+      area: "South Bengaluru",
+
+      dangerScore,
+      riskLevel,
+
+      radiusMeters: Math.min(
+        300 + cluster.length * 12,
+        900
+      ),
+
+      totalCrimes: cluster.length,
+
+      dominantCrimeType: dominantCrime,
+
+      topCrimes,
+
+      recommendation: getRecommendation(dangerScore),
+
+      policeStation: "South Division",
+
+      clusterSize: cluster.length,
+
+      isCluster: cluster.length > 1
     });
   }
 
-  const zones = await DangerZone.find({ isActive: true }).sort({
-    updatedAt: -1
-  });
+  return clusters;
+}
 
-  const points = zones.length
-    ? zones.map((zone) => toHeatmapPoint(zone))
-    : demoZones.map((zone) => toHeatmapPoint(zone, true));
+// -----------------------------------------------------
+// GET HEATMAP
+// -----------------------------------------------------
+
+const getHeatmap = asyncHandler(async (req, res) => {
+  const dataset = loadSouthCrimeDataset();
+
+  if (!dataset || !dataset.records) {
+    return res.status(500).json({
+      success: false,
+      message: "Crime dataset not loaded"
+    });
+  }
+
+  const records = dataset.records
+    .map((r) => ({
+      ...r,
+      latitude: Number(r.latitude || r.location?.latitude),
+      longitude: Number(r.longitude || r.location?.longitude)
+    }))
+    .filter(
+      (r) =>
+        Number.isFinite(r.latitude) &&
+        Number.isFinite(r.longitude)
+    )
+    .slice(0, 7000);
+
+  const clustered = clusterPoints(records);
+
+  const avgDangerScore = clustered.length
+    ? Math.round(
+        clustered.reduce((sum, p) => sum + p.dangerScore, 0) /
+          clustered.length
+      )
+    : 0;
 
   res.json({
-    points,
-    dataSource: zones.length ? "database" : "demo",
-    message: zones.length
-      ? "Heatmap loaded from danger zone records"
-      : "Demo heatmap returned because no danger zone dataset is loaded yet"
+    success: true,
+
+    count: clustered.length,
+
+    avgDangerScore,
+
+    bounds: SOUTH_BENGALURU_BOUNDS,
+
+    points: clustered
   });
 });
 
+// -----------------------------------------------------
+// ANALYZE AREA
+// -----------------------------------------------------
+
 const analyzeArea = asyncHandler(async (req, res) => {
-  const {
-    latitude,
-    longitude,
-    radiusMeters,
-    mode,
-    crimeType,
-    year
-  } = req.body;
+  const { latitude, longitude, radiusMeters = 500 } = req.body;
 
   const lat = Number(latitude);
   const lng = Number(longitude);
 
-  if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
-    return res.status(400).json({
-      message: "Valid latitude and longitude are required"
+  const dataset = loadSouthCrimeDataset();
+
+  const nearby = dataset.records
+    .map((r) => ({
+      ...r,
+      latitude: Number(r.latitude || r.location?.latitude),
+      longitude: Number(r.longitude || r.location?.longitude)
+    }))
+    .filter((r) => {
+      const dist = haversineMeters(
+        lat,
+        lng,
+        r.latitude,
+        r.longitude
+      );
+
+      return dist <= radiusMeters;
+    });
+
+  if (!nearby.length) {
+    return res.json({
+      success: true,
+      analytics: {
+        dangerScore: 5,
+        riskLevel: "Low",
+        totalCrimes: 0,
+        topCrimes: [],
+        recommendation: "Very little crime reported nearby.",
+        hotspotCount: 0,
+        peakTime: "Evening",
+        nearestStation: "South Division",
+        radiusMeters
+      }
     });
   }
 
-  if (!isWithinSouthBengaluru(lat, lng)) {
-    return res.status(400).json({
-      message: "Location is outside supported South Bengaluru region"
-    });
-  }
+  const crimeCounts = {};
 
-  const nearbyRecords = filterStaticRecords({
-    latitude: lat,
-    longitude: lng,
-    radiusMeters,
-    mode,
-    crimeType,
-    year
+  nearby.forEach((c) => {
+    crimeCounts[c.crimeType] =
+      (crimeCounts[c.crimeType] || 0) + 1;
   });
 
-  const analytics = buildAnalytics(
-    nearbyRecords,
-    { latitude: lat, longitude: lng },
-    radiusMeters
+  const dominantCrime = Object.entries(crimeCounts).sort(
+    (a, b) => b[1] - a[1]
+  )[0][0];
+
+  const dangerScore = calculateDangerScore(
+    dominantCrime,
+    nearby.length
   );
+
+  const analytics = {
+    dangerScore,
+
+    riskLevel: getRiskLevel(dangerScore),
+
+    totalCrimes: nearby.length,
+
+    hotspotCount: Math.max(
+      1,
+      Math.floor(nearby.length / 8)
+    ),
+
+    peakTime:
+      dangerScore >= 60
+        ? "Night"
+        : dangerScore >= 40
+        ? "Evening"
+        : "Afternoon",
+
+    nearestStation: "South Division",
+
+    radiusMeters,
+
+    recommendation: getRecommendation(dangerScore),
+
+    topCrimes: Object.entries(crimeCounts)
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 5)
+      .map(([crimeType, count]) => ({
+        crimeType,
+        count,
+        probability: Math.round(
+          (count / nearby.length) * 100
+        )
+      }))
+  };
 
   res.json({
     success: true,
-    analytics,
-    nearbyCrimes: nearbyRecords.slice(0, 25)
+    analytics
   });
 });
 
-const seedDemoZones = asyncHandler(async (_req, res) => {
-  await DangerZone.deleteMany({});
-
-  await DangerZone.insertMany(
-    demoZones.map(({ _id, ...zone }) => zone)
-  );
-
-  await Alert.deleteMany({ category: "crime" });
-
-  await Alert.insertMany(
-    demoZones.map((zone) => ({
-      title: zone.name,
-      message:
-        "AI geo-fence warning generated from demo danger zone data.",
-      category: "crime",
-      severity: zone.color === "red" ? "critical" : "high",
-      location: zone.location
-    }))
-  );
-
-  res.json({
-    message: "Demo heatmap zones seeded",
-    count: demoZones.length
-  });
-});
+// -----------------------------------------------------
 
 module.exports = {
   getHeatmap,
-  analyzeArea,
-  seedDemoZones
+  analyzeArea
 };

@@ -1,330 +1,518 @@
-import { useEffect, useState } from "react";
+import React, { useEffect, useState, useMemo } from "react";
 import {
   MapContainer,
-  Marker,
-  Popup,
   TileLayer,
-  Circle,
-  useMap,
+  CircleMarker,
+  Popup,
+  Marker,
   useMapEvents
 } from "react-leaflet";
 
 import L from "leaflet";
 import axios from "axios";
 
-const userIcon = L.divIcon({
-  className: "",
-  html: "<span style='display:grid;place-items:center;width:34px;height:34px;border-radius:999px;background:#2563eb;color:white;border:3px solid white;font-weight:900;'>U</span>",
-  iconSize: [34, 34],
-  iconAnchor: [17, 17]
-});
+import "leaflet/dist/leaflet.css";
 
-const serviceIcon = L.divIcon({
-  className: "",
-  html: "<span style='display:grid;place-items:center;width:30px;height:30px;border-radius:999px;background:#16a34a;color:white;border:2px solid white;font-weight:900;'>+</span>",
-  iconSize: [30, 30],
-  iconAnchor: [15, 15]
-});
+// -----------------------------------------------------
+// CONFIG
+// -----------------------------------------------------
 
-const defaultServices = [
-  {
-    id: "hospital",
-    type: "Hospital",
-    name: "Apollo Hospital",
-    latitude: 12.9121,
-    longitude: 77.6446,
-    distance: "1.1 km"
-  },
-  {
-    id: "police",
-    type: "Police",
-    name: "South Bengaluru Police",
-    latitude: 12.918,
-    longitude: 77.623,
-    distance: "750 m"
-  }
-];
+const API_BASE =
+  import.meta.env.VITE_API_URL || "http://localhost:5000/api";
 
-function validLocation(location) {
-  return Number.isFinite(location?.latitude)
-    && Number.isFinite(location?.longitude);
-}
+const CENTER = [12.9352, 77.6245];
 
-function RecenterMap({ center }) {
-  const map = useMap();
+const RISK_COLORS = {
+  Critical: "#ff1744",
+  High: "#ff9100",
+  Moderate: "#ffd600",
+  Low: "#00e676"
+};
 
-  useEffect(() => {
-    map.setView(center, map.getZoom(), {
-      animate: true
-    });
-  }, [center, map]);
+const CRIME_ICONS = {
+  Murder: "🔪",
+  Rape: "⚠️",
+  "Attempted Murder": "☠️",
+  Kidnap: "🚨",
+  Robbery: "🦹",
+  Assault: "🥊",
+  "Chain Snatching": "⛓️",
+  "4 Wheeler Theft": "🚗",
+  "2 wheeler theft": "🛵",
+  "Ordinary Theft": "🎒"
+};
 
-  return null;
-}
+// -----------------------------------------------------
+// MAP CLICK HANDLER
+// -----------------------------------------------------
 
-function MapClickAnalyzer({ setAnalysis }) {
+function ClickHandler({ onClick }) {
   useMapEvents({
-    async click(event) {
-      try {
-        const token = localStorage.getItem("token");
-
-        const response = await axios.post(
-          "http://localhost:5000/api/heatmap/analyze",
-          {
-            latitude: event.latlng.lat,
-            longitude: event.latlng.lng,
-            radiusMeters: 1200
-          },
-          {
-            headers: {
-              Authorization: `Bearer ${token}`
-            }
-          }
-        );
-
-        setAnalysis({
-          latitude: event.latlng.lat,
-          longitude: event.latlng.lng,
-          data: response.data.analytics
-        });
-
-      } catch (error) {
-        console.error(error);
-
-        alert(
-          error?.response?.data?.message
-          || "Area analysis failed"
-        );
-      }
+    click(e) {
+      onClick(e.latlng.lat, e.latlng.lng);
     }
   });
 
   return null;
 }
 
-export default function MapPanel({
-  location,
-  alerts = [],
-  services = defaultServices,
-  heatmap = []
-}) {
-  const [analysis, setAnalysis] = useState(null);
+// -----------------------------------------------------
+// ANALYSIS POPUP
+// -----------------------------------------------------
 
-  const safeLocation = validLocation(location)
-    ? location
-    : {
-        latitude: 12.9121,
-        longitude: 77.6446,
-        addressLabel: "South Bengaluru"
-      };
+function AnalysisPopup({ data, loading }) {
+  if (loading) {
+    return (
+      <div style={{ padding: 20, minWidth: 260 }}>
+        <div style={{ color: "#fff" }}>Analyzing area...</div>
+      </div>
+    );
+  }
 
-  const center = [
-    safeLocation.latitude,
-    safeLocation.longitude
-  ];
+  if (!data) return null;
 
   return (
-    <MapContainer
-      center={center}
-      zoom={13}
-      className="h-[440px] w-full rounded-xl z-0"
+    <div
+      style={{
+        minWidth: 320,
+        color: "white",
+        fontFamily: "Inter, sans-serif"
+      }}
     >
-      <RecenterMap center={center} />
-
-      <MapClickAnalyzer setAnalysis={setAnalysis} />
-
-      <TileLayer
-        attribution="&copy; OpenStreetMap contributors"
-        url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-      />
-
-      <Marker position={center} icon={userIcon}>
-        <Popup>
-          <div>
-            <strong>
-              {safeLocation.addressLabel || "Your Location"}
-            </strong>
-
-            <br />
-
-            {safeLocation.latitude.toFixed(5)},
-            {" "}
-            {safeLocation.longitude.toFixed(5)}
+      <div
+        style={{
+          marginBottom: 12,
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "space-between"
+        }}
+      >
+        <div>
+          <div
+            style={{
+              fontSize: 18,
+              fontWeight: 700
+            }}
+          >
+            Area Analysis
           </div>
-        </Popup>
-      </Marker>
 
-      {services.map((service) => (
-        <Marker
-          key={service.id}
-          position={[
-            service.latitude,
-            service.longitude
-          ]}
-          icon={serviceIcon}
-        >
-          <Popup>
-            <strong>{service.name}</strong>
+          <div
+            style={{
+              color: RISK_COLORS[data.riskLevel],
+              fontWeight: 600
+            }}
+          >
+            {data.riskLevel} Risk
+          </div>
+        </div>
 
-            <br />
-
-            {service.type}
-            {" · "}
-            {service.distance}
-          </Popup>
-        </Marker>
-      ))}
-
-      {alerts.map((alert) => (
-        <Circle
-          key={alert._id}
-          center={[
-            alert.location.latitude,
-            alert.location.longitude
-          ]}
-          radius={alert.location.radiusMeters || 500}
-          pathOptions={{
-            color: "#dc2626",
-            fillColor: "#dc2626",
-            fillOpacity: 0.18
-          }}
-        />
-      ))}
-
-      {Array.isArray(heatmap) && heatmap.map((point, index) => (
-        <Circle
-          key={point.id || index}
-          center={[
-            point.latitude,
-            point.longitude
-          ]}
-          radius={point.radiusMeters || 700}
-          pathOptions={{
-            color:
-              point.dangerScore >= 80
-                ? "#dc2626"
-                : point.dangerScore >= 60
-                ? "#f97316"
-                : point.dangerScore >= 35
-                ? "#eab308"
-                : "#16a34a",
-
-            fillColor:
-              point.dangerScore >= 80
-                ? "#dc2626"
-                : point.dangerScore >= 60
-                ? "#f97316"
-                : point.dangerScore >= 35
-                ? "#eab308"
-                : "#16a34a",
-
-            fillOpacity: 0.28
+        <div
+          style={{
+            width: 60,
+            height: 60,
+            borderRadius: "50%",
+            background: RISK_COLORS[data.riskLevel],
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            fontWeight: 800,
+            fontSize: 20,
+            color: "#000"
           }}
         >
-          <Popup>
-            <div className="space-y-2 min-w-[220px]">
-              <h3 className="font-bold text-lg">
-                {point.crimeType || point.name || "Danger Zone"}
-              </h3>
+          {data.dangerScore}
+        </div>
+      </div>
 
-              <p>
-                <strong>Danger Score:</strong>
-                {" "}
-                {point.dangerScore || 0}/100
-              </p>
+      <div
+        style={{
+          marginBottom: 14,
+          padding: 10,
+          borderRadius: 10,
+          background: "rgba(255,255,255,0.06)"
+        }}
+      >
+        {data.recommendation}
+      </div>
 
-              <p>
-                <strong>Risk Level:</strong>
-                {" "}
-                {point.riskLevel || "Unknown"}
-              </p>
+      <div
+        style={{
+          marginBottom: 10,
+          fontWeight: 600
+        }}
+      >
+        Likely Crimes
+      </div>
 
-              <p>
-                <strong>Total Crimes:</strong>
-                {" "}
-                {point.totalCrimes || 0}
-              </p>
+      {data.topCrimes?.map((crime, idx) => (
+        <div
+          key={idx}
+          style={{
+            marginBottom: 10
+          }}
+        >
+          <div
+            style={{
+              display: "flex",
+              justifyContent: "space-between",
+              marginBottom: 4
+            }}
+          >
+            <span>
+              {CRIME_ICONS[crime.crimeType] || "⚫"}{" "}
+              {crime.crimeType}
+            </span>
 
-              <div>
-                <strong>Likely Crimes:</strong>
+            <span>{crime.probability}%</span>
+          </div>
 
-                <ul className="list-disc ml-5">
-                  {(point.topCrimes || []).map((crime, idx) => (
-                    <li key={idx}>
-                      {crime.crimeType || "Unknown"}
-                      {" "}
-                      ({crime.probability || 0}%)
-                    </li>
-                  ))}
-                </ul>
-              </div>
-
-              <p>
-                <strong>Recommendation:</strong>
-                {" "}
-                {point.recommendation
-                  || "Stay alert in this area."}
-              </p>
-            </div>
-          </Popup>
-        </Circle>
+          <div
+            style={{
+              height: 6,
+              borderRadius: 20,
+              background: "#222"
+            }}
+          >
+            <div
+              style={{
+                width: `${crime.probability}%`,
+                height: "100%",
+                borderRadius: 20,
+                background: RISK_COLORS[data.riskLevel]
+              }}
+            />
+          </div>
+        </div>
       ))}
 
-      {analysis && (
-        <Marker
-          position={[
-            analysis.latitude,
-            analysis.longitude
-          ]}
+      <div
+        style={{
+          marginTop: 16,
+          fontSize: 13,
+          color: "#aaa"
+        }}
+      >
+        Total Crimes: {data.totalCrimes}
+      </div>
+    </div>
+  );
+}
+
+// -----------------------------------------------------
+// MAIN COMPONENT
+// -----------------------------------------------------
+
+export default function MapPanel() {
+  const [points, setPoints] = useState([]);
+
+  const [loading, setLoading] = useState(true);
+
+  const [analysisLoading, setAnalysisLoading] =
+    useState(false);
+
+  const [analysisData, setAnalysisData] = useState(null);
+
+  const [analysisPosition, setAnalysisPosition] =
+    useState(null);
+
+  // -----------------------------------------------------
+  // LOAD HEATMAP
+  // -----------------------------------------------------
+
+  useEffect(() => {
+    async function fetchHeatmap() {
+      try {
+        setLoading(true);
+
+        const res = await axios.get(
+          `${API_BASE}/heatmap`
+        );
+
+        if (res.data.success) {
+          setPoints(res.data.points || []);
+        }
+      } catch (err) {
+        console.error("Heatmap error:", err);
+      } finally {
+        setLoading(false);
+      }
+    }
+
+    fetchHeatmap();
+  }, []);
+
+  // -----------------------------------------------------
+  // CLICK ANALYSIS
+  // -----------------------------------------------------
+
+  async function analyzeArea(lat, lng) {
+    try {
+      setAnalysisLoading(true);
+
+      setAnalysisPosition([lat, lng]);
+
+      const res = await axios.post(
+        `${API_BASE}/heatmap/analyze`,
+        {
+          latitude: lat,
+          longitude: lng,
+          radiusMeters: 600
+        }
+      );
+
+      if (res.data.success) {
+        setAnalysisData(res.data.analytics);
+      }
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setAnalysisLoading(false);
+    }
+  }
+
+  // -----------------------------------------------------
+  // GLOW ICON
+  // -----------------------------------------------------
+
+  const createGlowIcon = (point) => {
+    const color =
+      RISK_COLORS[point.riskLevel] || "#00e676";
+
+    const size =
+      point.dangerScore >= 75
+        ? 90
+        : point.dangerScore >= 50
+        ? 70
+        : point.dangerScore >= 25
+        ? 50
+        : 35;
+
+    return L.divIcon({
+      className: "",
+
+      html: `
+        <div
+          style="
+            width:${size}px;
+            height:${size}px;
+            border-radius:50%;
+            background:${color};
+            opacity:0.28;
+            box-shadow:
+              0 0 30px ${color},
+              0 0 60px ${color},
+              0 0 90px ${color};
+            animation:pulse 2s infinite;
+          "
+        ></div>
+      `,
+
+      iconSize: [size, size]
+    });
+  };
+
+  // -----------------------------------------------------
+  // STYLES
+  // -----------------------------------------------------
+
+  useEffect(() => {
+    const style = document.createElement("style");
+
+    style.innerHTML = `
+      .leaflet-container {
+        background:#050816;
+      }
+
+      .leaflet-popup-content-wrapper {
+        background:rgba(10,15,30,0.96);
+        color:white;
+        border:1px solid rgba(255,255,255,0.08);
+        border-radius:18px;
+      }
+
+      .leaflet-popup-tip {
+        background:rgba(10,15,30,0.96);
+      }
+
+      @keyframes pulse {
+        0% {
+          transform:scale(1);
+        }
+
+        50% {
+          transform:scale(1.08);
+        }
+
+        100% {
+          transform:scale(1);
+        }
+      }
+    `;
+
+    document.head.appendChild(style);
+
+    return () => {
+      document.head.removeChild(style);
+    };
+  }, []);
+
+  // -----------------------------------------------------
+  // LEGEND
+  // -----------------------------------------------------
+
+  const legend = useMemo(
+    () => (
+      <div
+        style={{
+          position: "absolute",
+          bottom: 20,
+          left: 20,
+          zIndex: 1000,
+          padding: 14,
+          borderRadius: 18,
+          background: "rgba(8,12,24,0.92)",
+          color: "white",
+          width: 180,
+          backdropFilter: "blur(18px)",
+          border: "1px solid rgba(255,255,255,0.08)"
+        }}
+      >
+        <div
+          style={{
+            fontWeight: 700,
+            marginBottom: 10
+          }}
         >
-          <Popup open={true}>
-            <div className="space-y-2 min-w-[240px]">
-              <h3 className="font-bold text-lg">
-                Area Safety Analysis
-              </h3>
+          Risk Levels
+        </div>
 
-              <p>
-                <strong>Danger Score:</strong>
-                {" "}
-                {analysis.data?.dangerScore || 0}/100
-              </p>
+        {Object.entries(RISK_COLORS).map(
+          ([risk, color]) => (
+            <div
+              key={risk}
+              style={{
+                display: "flex",
+                alignItems: "center",
+                marginBottom: 8
+              }}
+            >
+              <div
+                style={{
+                  width: 14,
+                  height: 14,
+                  borderRadius: "50%",
+                  background: color,
+                  marginRight: 10,
+                  boxShadow: `0 0 12px ${color}`
+                }}
+              />
 
-              <p>
-                <strong>Risk Level:</strong>
-                {" "}
-                {analysis.data?.riskLevel || "Unknown"}
-              </p>
-
-              <p>
-                <strong>Total Crimes:</strong>
-                {" "}
-                {analysis.data?.totalCrimes || 0}
-              </p>
-
-              <div>
-                <strong>Likely Crimes:</strong>
-
-                <ul className="list-disc ml-5">
-                  {(analysis.data?.topCrimes || []).map((crime, idx) => (
-                    <li key={idx}>
-                      {crime.crimeType}
-                      {" "}
-                      ({crime.probability}%)
-                    </li>
-                  ))}
-                </ul>
-              </div>
-
-              <p>
-                <strong>Recommendation:</strong>
-                {" "}
-                {analysis.data?.recommendation
-                  || "Stay alert."}
-              </p>
+              {risk}
             </div>
-          </Popup>
-        </Marker>
+          )
+        )}
+
+        <div
+          style={{
+            marginTop: 12,
+            fontSize: 12,
+            color: "#aaa"
+          }}
+        >
+          Click anywhere to analyze an area
+        </div>
+      </div>
+    ),
+    []
+  );
+
+  // -----------------------------------------------------
+  // RENDER
+  // -----------------------------------------------------
+
+  return (
+    <div
+      style={{
+        width: "100%",
+        height: "100%",
+        position: "relative"
+      }}
+    >
+      {loading && (
+        <div
+          style={{
+            position: "absolute",
+            top: 20,
+            left: "50%",
+            transform: "translateX(-50%)",
+            zIndex: 9999,
+            background: "rgba(0,0,0,0.8)",
+            color: "white",
+            padding: "10px 18px",
+            borderRadius: 12
+          }}
+        >
+          Loading heatmap...
+        </div>
       )}
-    </MapContainer>
+
+      <MapContainer
+        center={CENTER}
+        zoom={13}
+        style={{
+          width: "100%",
+          height: "100%"
+        }}
+      >
+        <TileLayer
+          url="https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png"
+          attribution="&copy; OpenStreetMap & CARTO"
+        />
+
+        <ClickHandler onClick={analyzeArea} />
+
+        {/* HEATMAP */}
+
+        {points.map((point) => (
+          <Marker
+            key={point.id}
+            position={[
+              point.latitude,
+              point.longitude
+            ]}
+            icon={createGlowIcon(point)}
+          >
+            <Popup>
+              <AnalysisPopup data={point} />
+            </Popup>
+          </Marker>
+        ))}
+
+        {/* ANALYSIS */}
+
+        {analysisPosition && (
+          <CircleMarker
+            center={analysisPosition}
+            radius={12}
+            pathOptions={{
+              fillColor: "#2196f3",
+              color: "#fff",
+              weight: 2,
+              fillOpacity: 1
+            }}
+          >
+            <Popup autoOpen>
+              <AnalysisPopup
+                data={analysisData}
+                loading={analysisLoading}
+              />
+            </Popup>
+          </CircleMarker>
+        )}
+      </MapContainer>
+
+      {legend}
+    </div>
   );
 }
